@@ -11,4 +11,4 @@ My idea was basically to make an LED strip for kitchen which could be control by
 * 1m WS2812B LED strip 
 
 ### Circuit:
-![Circuit](/img/LED_strip_w_sensors.png)
+![Circuit](/img/LED_strip_w_sensors.png) 
