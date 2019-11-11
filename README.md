@@ -6,6 +6,7 @@ My idea was basically to make an LED strip for kitchen which could be control by
 ### Components I used in this projects:
 * Arduino nano (ATMega 168P)
 * 3pin Sound Sensor (Mic) 
+* 330R resistor
 * 16V 470µF capacitor
 * 220V AC to 5V DC power supply (https://www.aliexpress.com/item/32808072134.html?spm=a2g0s.9042311.0.0.27424c4dNvvsRd)
 * 1m WS2812B LED strip 
