@@ -1,29 +1,37 @@
 #include <Arduino.h>
 #include <FastLED.h>
+#include <SoftwareSerial.h>
 
 #define TRIGGER 15
 
 #define DATA_PIN    16
 #define NUM_LEDS    30
-#define BRIGHTNESS  250
+#define BRIGHTNESS  255
 #define LED_TYPE    WS2812B
 
 CRGB leds[NUM_LEDS];
 
+DEFINE_GRADIENT_PALETTE( royal_BTe_gd ) {
+  0,     0,  0,  0,   //black
+255,   65,  105,  225}; // CRGB::RoyalBTe
+
+CRGBPalette16 myPal = royal_BTe_gd;
+SoftwareSerial BT(8, 7);
+
 int first_clap_millis = 0;
 int claps = 0;
-bool led_state = LOW;
-bool previous_led_state = LOW;
 
-void turn_led_on();
-void turn_led_off();
+void switch_leds();
+
+uint8_t timeDelay = 5;  // time in ms.  Lower number is faster travel.
 
 void setup() {
   Serial.begin(9600);
+  BT.begin(9600);
   pinMode(TRIGGER, INPUT);
 
   // LED set-up
-  FastLED.addLeds<LED_TYPE, DATA_PIN, RGB>(leds, NUM_LEDS);
+  FastLED.addLeds<LED_TYPE, DATA_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(  BRIGHTNESS );
 }
 
@@ -36,15 +44,9 @@ void loop() {
     claps += 1;
     if ((current_millis - first_clap_millis) >= 200 && (current_millis - first_clap_millis) <= 800) {
       Serial.println("double mic!");
-      led_state = !led_state;
       
-      if (led_state) {
-        turn_led_on();
-      } else {
-        turn_led_off();
-      } // if
+      switch_leds();
 
-      previous_led_state = !previous_led_state;
       claps = 0;
     } // if
 
@@ -52,32 +54,65 @@ void loop() {
 
     claps = 0;
   } // if 
-}
 
-void turn_led_on() {
-  if (previous_led_state) { return; } // do nothing if previous state was HIGH
 
-  for (int i=0; i<NUM_LEDS; i++) { // iterate through LEDs
-    for (int n=0; n <= 255; n+=15 ) { // change brightness of a single LED (increase)
-      leds[i] = CHSV(256, 100, n);
-      delay(1);
-      FastLED.show();
+  if (leds[0].r > 0) {
+    fill_solid(leds, NUM_LEDS, ColorFromPalette(myPal, 200));
+    FastLED.show();
+    
+    while (BT.available() > 0) {
+      int redInt = BT.parseInt();
+      int greenInt = BT.parseInt();
+      int BTeInt = BT.parseInt();
+      redInt = constrain(redInt, 0, 255);
+      greenInt = constrain(greenInt, 0, 255);
+      BTeInt = constrain(BTeInt, 0, 255);
+      if (BT.available() > 0)
+      {
+        // Serial.print("Red: ");
+        // Serial.print(redInt);
+        // Serial.print(" Green: ");
+        // Serial.print(greenInt);
+        // Serial.print(" BTe: ");
+        // Serial.print(BTeInt);
+        // Serial.println();
+        fill_solid(leds, NUM_LEDS, CRGB(redInt, greenInt, BTeInt));
+        FastLED.show();
+        BT.flush();
+      }
     }
-    delay(5); // delay between LEDs
   }
-  FastLED.show();
 }
+/*
+  Toggle LEDs on and off. You can only
+  set colours when 0 LED is on. 
+*/
+void switch_leds() {
+  //Serial.println(leds[0].r);
+  if (leds[0].r == 0) {
+    for (uint16_t i = 0; i < NUM_LEDS / 2; i++) {
+      for (int index = 0; index <= 200; index += 20) {
+        leds[i] = ColorFromPalette(myPal, index);
+        leds[NUM_LEDS - i] = ColorFromPalette(myPal, index);
 
-void turn_led_off() {
-  if (!previous_led_state) { return; } // do nothing if previous state was LOW
-
-  for (int i=0; i<NUM_LEDS; i++) { // iterate through LEDs
-    for (int n=255; n >= 0; n-=15 ) { // change brightness of a single LED (decrease)
-      leds[i] = CHSV(256, 100, n);
-      delay(1);
-      FastLED.show();
+        //if (i == NUM_LEDS - i) { return; };
+        FastLED.show();
+        delay(10);
+      }// for
+    delay(timeDelay);
     }
-    delay(5); // delay between LEDs
+  } else {
+    //Serial.println("LOW");
+    for (uint16_t i = 15; i <= NUM_LEDS; i++) {
+      for (int index = 200; index >= 0; index -= 20) {
+        leds[i] = ColorFromPalette(myPal, index);
+        leds[NUM_LEDS - i] = ColorFromPalette(myPal, index);
+
+        FastLED.show();
+        delay(10);
+      } // for
+    delay(timeDelay);
+    } // for
   }
-  FastLED.clear();
+  
 }
