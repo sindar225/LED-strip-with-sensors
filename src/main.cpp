@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <FastLED.h>
-#include <SoftwareSerial.h>
 
 #define TRIGGER 15
 
@@ -9,6 +8,7 @@
 #define BRIGHTNESS  255
 #define GRADIENT_PALLETE_END 200
 #define LED_TYPE    WS2812B
+#define timeDelay 5  // time in ms for switch_leds().  Lower number is faster travel.
 
 CRGB leds[NUM_LEDS];
 
@@ -16,13 +16,12 @@ DEFINE_GRADIENT_PALETTE( royal_BTe_gd ) {
   0,     0,  0,  0,   //black
 255,   0,  0,  80}; // CRGB::RoyalBTe
 
-
 CRGBPalette16 myPal = royal_BTe_gd;
 
 //SoftwareSerial BT(8, 7);
 
 int first_clap_millis = 0;
-int claps = 0;
+uint8_t claps = 0;
 bool state = LOW;
 
 /*
@@ -35,19 +34,21 @@ void rainbow_beat();
 void beatwave();
 void fill_grad();
 void dot_beat();
-uint8_t modes[] = { 0, 1, 2, 3, 4 };
+void inoise8_mover();
+void inoise8_mover_routine();
+void meteorShower();
+uint8_t modes[] = { 0, 1, 2, 3, 4, 5 };
 uint8_t currentEffect;
 
-uint8_t timeDelay = 5;  // time in ms.  Lower number is faster travel.
-
 void setup() {
-  //Serial.begin(9600);
+  Serial.begin(9600);
   //BT.begin(9600);
   pinMode(TRIGGER, INPUT);
 
   // LED set-up
   FastLED.addLeds<LED_TYPE, DATA_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness( BRIGHTNESS );
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500); 
 }
 
 void loop() {
@@ -60,7 +61,8 @@ void loop() {
       claps = 1;
     }
     
-    if ((current_millis - first_clap_millis) >= 200 && (current_millis - first_clap_millis) <= 600) {
+    if ((current_millis - first_clap_millis) >= 200 && (current_millis - first_clap_millis) <= 1000) {
+      Serial.println("Double clap!");
       claps = 2;
     } 
     first_clap_millis = current_millis;
@@ -84,9 +86,12 @@ void loop() {
         break;
       case 3: fill_grad();
         break;
-      case 4: dot_beat();
+      case 4: inoise8_mover();
+        break;
+      case 5: meteorShower();
         break;
     }
+  Serial.print("Current effect: "); Serial.println(currentEffect);
     
   }
   FastLED.show();
@@ -155,7 +160,7 @@ void switch_leds() {
 }
 
 void switch_modes() {
-  int modesLength = (sizeof(modes) / sizeof(modes[0])) - 1;
+  uint8_t modesLength = (sizeof(modes) / sizeof(modes[0])) - 1;
   modes[currentEffect] == modesLength ? currentEffect = modes[0] : currentEffect = modes[currentEffect + 1];
   //Serial.print("Array length: "); Serial.println(modesLength);
   //Serial.print("Mode: "); Serial.println(currentEffect);
@@ -172,13 +177,13 @@ void rainbow_beat() {
 
 } // rainbow_beat()
 
+/*
+    Beatwave parameters
+*/
 // Palette definitions
 CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
   
-/*
-    Beatwave parameters
-*/
 TBlendType currentBlending = LINEARBLEND;
 
 void beatwave() {
@@ -217,27 +222,103 @@ void fill_grad() {
 } // fill_grad()
 
 /*
-  Dot beat
+  Mover
+*/
+ 
+CRGBPalette16 startPalette=LavaColors_p;
+CRGBPalette16 endPalette=OceanColors_p;
+ 
+uint16_t xscale = 30;                                         // Wouldn't recommend changing this on the fly, or the animation will be really blocky.
+uint16_t yscale = 30;                                         // Wouldn't recommend changing this on the fly, or the animation will be really blocky.
+
+uint8_t maxChanges = 24;  
+
+static int16_t dist = random16(12345);  
+
+void inoise8_mover() {
+  
+    EVERY_N_MILLISECONDS(10) {
+    nblendPaletteTowardPalette(startPalette, endPalette, maxChanges);   // AWESOME palette blending capability.
+    
+    inoise8_mover_routine();                                          // Update the LED array with noise at the new location
+    fadeToBlackBy(leds, NUM_LEDS, 4);     
+  }
+
+  EVERY_N_SECONDS(5) {                                        // Change the target palette to a random one every 5 seconds.
+    endPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
+  }
+ 
+  FastLED.show();
+  
+} // loop()
+
+void inoise8_mover_routine() {
+
+  uint8_t locn = inoise8(xscale, dist+yscale) % 255;          // Get a new pixel location from moving noise.
+  uint8_t pixlen = map(locn,0,255,0,NUM_LEDS);                // Map that to the length of the strand.
+  leds[pixlen] = ColorFromPalette(startPalette, pixlen, 255, LINEARBLEND);   // Use that value for both the location as well as the palette index colour for the pixel.
+
+  dist += beatsin8(10,1,8);                                                // Moving along the distance (that random number we started out with). Vary it a bit with a sine wave.                                             
+
+} // inoise8_mover()
+
+/*
+  Meteor shower
 */
 
-// Define variables used by the sequences.
-int   thisdelay =   10;                                       // A delay value for the sequence(s)
-uint8_t   count =   0;                                        // Count up to 255 and then reverts to 0
-uint8_t fadeval = 224;                                        // Trail behind the LED's. Lower => faster fade.
+uint8_t hue = 32;
+byte idex = 255;
+byte meteorLength = 29;
 
-uint8_t bpm = 30;
-
-void dot_beat() {
-
-  uint8_t inner = beatsin8(bpm, NUM_LEDS/4, NUM_LEDS/4*3);    // Move 1/4 to 3/4
-  uint8_t outer = beatsin8(bpm, 0, NUM_LEDS-1);               // Move entire length
-  uint8_t middle = beatsin8(bpm, NUM_LEDS/3, NUM_LEDS/3*2);   // Move 1/3 to 2/3
-
-  leds[middle] = CRGB::Purple;
-  leds[inner] = CRGB::Blue;
-  leds[outer] = CRGB::Aqua;
-
-  nscale8(leds,NUM_LEDS,fadeval);                             // Fade the entire array. Or for just a few LED's, use  nscale8(&leds[2], 5, fadeval);
-
-} // dot_beat()
-
+void meteorShower(){
+  // slide all the pixels down one in the array
+  EVERY_N_MILLISECONDS(random8(40, 100)) {    
+    memmove8( &leds[1], &leds[0], (NUM_LEDS - 1) * 3 );
+  
+    // increment the meteor display frame
+    idex++;
+    // make sure we don't drift into space
+    if ( idex > meteorLength ) {
+      idex = 0;
+      // cycle through hues in each successive meteor tail
+      hue += 32;  
+    }
+  
+    // this switch controls the actual meteor animation, i.e., what gets placed in the
+    // first position and then subsequently gets moved down the strip by the memmove above
+    switch ( idex ) {
+    case 0:
+      leds[0] = CRGB(200,200,200);
+      break;
+    case 1:
+      leds[0] = CHSV((hue - 20), 255, 210);
+      break;
+    case 2:
+      leds[0] = CHSV((hue - 22), 255, 180);
+      break;
+    case 3:
+      leds[0] = CHSV((hue - 23), 255, 150);
+      break;
+    case 4:
+      leds[0] = CHSV((hue - 24), 255, 110);
+      break;
+    case 5:
+      leds[0] = CHSV((hue - 25), 255, 90);
+      break;
+    case 6:
+      leds[0] = CHSV((hue - 26), 160, 60);
+      break;
+    case 7:
+      leds[0] = CHSV((hue - 27), 140, 40);
+      break;
+    case 8:
+      leds[0] = CHSV((hue - 28), 120, 20);
+      break;
+    case 9:
+      leds[0] = CHSV((hue - 29), 100, 20);
+      break;
+    default:
+      leds[0] = CRGB::Black;
+    }
+  }
+}
