@@ -37,11 +37,12 @@ void dot_beat();
 void inoise8_mover();
 void inoise8_mover_routine();
 void meteorShower();
-uint8_t modes[] = { 0, 1, 2, 3, 4, 5 };
+void pulse();
+uint8_t modes[] = { 0, 1, 2, 3, 4, 5, 6 };
 uint8_t currentEffect;
 
 void setup() {
-  Serial.begin(9600);
+  //Serial.begin(9600);
   //BT.begin(9600);
   pinMode(TRIGGER, INPUT);
 
@@ -75,7 +76,7 @@ void loop() {
       break;
   } 
 
-  Serial.println(state);
+  //Serial.println(state);
   if (state) {
     switch (currentEffect) {
       case 0: starter_mode();
@@ -90,8 +91,10 @@ void loop() {
         break;
       case 5: meteorShower();
         break;
+      case 6: pulse();
+        break;
     }
-  Serial.print("Current effect: "); Serial.println(currentEffect);
+  //Serial.print("Current effect: "); Serial.println(currentEffect);
     
   }
   FastLED.show();
@@ -321,4 +324,38 @@ void meteorShower(){
       leds[0] = CRGB::Black;
     }
   }
+}
+
+/*
+  Pulse
+*/
+
+static float pulseSpeed = 0.8;  // Larger value gives faster pulse.
+
+uint8_t hueA = 130;  // Start hue at valueMin.
+uint8_t satA = 200;  // Start saturation at valueMin.
+float valueMin = 120.0;  // Pulse minimum value (Should be less then valueMax).
+
+uint8_t hueB = 190;  // End hue at valueMax.
+uint8_t satB = 255;  // End saturation at valueMax.
+float valueMax = 200.0;  // Pulse maximum value (Should be larger then valueMin).
+
+uint8_t pulse_hue = hueA;  // Do Not Edit
+uint8_t sat = satA;  // Do Not Edit
+float val = valueMin;  // Do Not Edit
+uint8_t hueDelta = hueA - hueB;  // Do Not Edit
+static float delta = (valueMax - valueMin) / 2.35040238;  // Do Not Edit
+
+void pulse() {
+  EVERY_N_MILLISECONDS(20) {
+    float dV = ((exp(sin(pulseSpeed * millis()/2000.0*PI)) -0.36787944) * delta);
+    val = valueMin + dV;
+    pulse_hue = map(val, valueMin, valueMax, hueA, hueB);  // Map hue based on current val
+    sat = map(val, valueMin, valueMax, satA, satB);  // Map sat based on current val
+
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CHSV(pulse_hue, sat, val);
+    }
+  }
+
 }
